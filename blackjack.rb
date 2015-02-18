@@ -65,7 +65,7 @@ def deck
   deck.shuffle!
 end
 
-def display_player_hand(array_of_cards)
+def display_hand(array_of_cards)
   segments = []
   array_of_cards.each { |card| segments << card[:face_up].call }
   ['','','','','','',''].zip(*segments).each do |joined_segments| 
@@ -73,13 +73,47 @@ def display_player_hand(array_of_cards)
   end  
 end
 
-def display_dealer_hand(array_of_cards)
+def display_hand_hidden(array_of_cards)
   segments = []
   segments << array_of_cards[0][:face_down].call
   array_of_cards[1..-1].each { |card| segments << card[:face_up].call }
   ['','','','','','',''].zip(*segments).each do |joined_segments| 
     puts joined_segments.inject { |a,b| a+b }
   end  
+end
+
+def aces(hand)
+  aces = []
+  hand.each { |card| aces << card if card[:rank] == 'Ace' }
+  aces
+end
+
+def other_cards(hand)                                     
+  other_cards = []
+  hand.each { |card| other_cards << card if card[:rank] != 'Ace' }
+  other_cards
+end 
+
+def points_aces(hand)  
+  posibilities = []
+  counter = 0
+  while counter < aces(hand).size + 1
+    posibilities << aces(hand).size + 10 * counter
+    counter += 1
+  end
+  posibilities == [0] ? [0,0] : posibilities
+end
+
+def points_other_cards(hand)   
+  points = 0                                  
+  other_cards(hand).each { |card| points += card[:value][0] }
+  points
+end
+
+def points(hand)
+  p_aces = points_aces(hand) 
+  p_other = points_other_cards(hand)
+  p_other + p_aces[1] > 21 ? p_other + p_aces[0] : p_other + p_aces[1]
 end
 
 def player_hand
@@ -90,10 +124,9 @@ def dealer_hand
   []
 end
 
-d = deck
+hand = [deck.sample,deck.sample,deck.sample]
+display_hand(hand)
+p points(hand)
 
-hand = [deck[0], deck[1], deck[2]]
+binding.pry
 
-display_dealer_hand(hand)
-
-# binding.pry
