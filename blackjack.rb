@@ -1,6 +1,19 @@
 # encoding: UTF-8
 require 'pry'
 
+def logo
+  '
+   ______ _            _    _            _    
+   | ___ \ |          | |  (_)          | |   
+   | |_/ / | __ _  ___| | ___  __ _  ___| | __
+   | ___ \ |/ _` |/ __| |/ / |/ _` |/ __| |/ /
+   | |_/ / | (_| | (__|   <| | (_| | (__|   < 
+   \____/|_|\__,_|\___|_|\_\ |\__,_|\___|_|\_\
+                          _/ |                
+                         |__/ '
+end
+
+# Cards and deck -------------------------------------------
 def suits
   ['Hearts', 'Diamonds', 'Clubs', 'Spades']
 end
@@ -82,6 +95,12 @@ def display_hand_hidden(hand)
   end  
 end
 
+def get_card_by_name(name)
+  deck.select { |card| card[:name] == name }.first
+end
+# Cards and deck -------------------------------------------
+
+# Counting points ------------------------------------------
 def aces(hand)
   aces = []
   hand.each { |card| aces << card if card[:rank] == 'Ace' }
@@ -116,23 +135,19 @@ def points(hand)
   p_other = points_other_cards(hand)
   p_other + p_aces[1] > 21 ? p_other + p_aces[0] : p_other + p_aces[1]
 end
+# Counting points ------------------------------------------
 
-def get_card_by_name(name)
-  deck.select { |card| card[:name] == name }.first
-end
-
+# Initialization of game -----------------------------------
 def game_state
   {
     deck: [],
-    player_name: '',    
+    player_name: '',   
     dealer_bank: 50000,
     player_bank: 0,
     bet: 0,
-    player_hand_1_points: 0,
-    player_hand_2_points: 0,
+    player_points: 0,
     dealer_points: 0,
-    player_hand_1: [],
-    player_hand_2: [],
+    player_hand: [],
     dealer_hand: []
   }
 end
@@ -167,15 +182,9 @@ def initial_state_of_game
   state[:deck] = lambda { deck }
   state
 end
+# Initialization of game -----------------------------------
 
-def reset_stats(game_state)
-  game_state[:bet] -= game_state[:bet]
-  game_state[:player_hand_1].clear
-  game_state[:player_hand_2].clear
-  game_state[:dealer_hand].clear
-  game_state[:deck] = lambda { deck }
-end
-
+# Game internals -------------------------------------------
 def bet(game_state)   
   begin
     system 'clear' 
@@ -189,38 +198,74 @@ def bet(game_state)
 end
 
 def first_deal(game_state)
-  3.times do
-    card = game_state[:deck].call.shift
-    game_state[:player_hand_1] << card
-  end
+  cards = game_state[:deck].call
   2.times do
-    card = game_state[:deck].call.shift
-    game_state[:dealer_hand] << card
+    game_state[:player_hand] << cards.shift
+    game_state[:dealer_hand] << cards.shift
+  end
+  game_state[:deck] = lambda { cards }
+  update_points(game_state)
+end
+
+def player_deal(game_state)
+  cards = game_state[:deck].call
+  game_state[:player_hand] << cards.shift
+  game_state[:deck] = lambda { cards }
+end
+
+def player_bust?(game_state)
+  points(game_state[:player_hand]) > 21
+end 
+
+def any_blackjacks?(game_state)
+  if points(game_state[:player_hand]) == 21 then true
+  elsif points(game_state[:dealer_hand]) == 21 then true
+  else false
   end
 end
 
-# def hit_or_stay
-#   begin
-#     puts "\nHIT (h), or STAY (s) ?"
-#     action = gets.chomp.downcase
-#   end while !['h','s'].include?(action) 
-#   puts "\nYou have chosen to HIT!" if action == 'h'
-#   puts "\nYou have decided to STAY." if action == 's'
-# end
-
-def logo
-  '
-   ______ _            _    _            _    
-   | ___ \ |          | |  (_)          | |   
-   | |_/ / | __ _  ___| | ___  __ _  ___| | __
-   | ___ \ |/ _` |/ __| |/ / |/ _` |/ __| |/ /
-   | |_/ / | (_| | (__|   <| | (_| | (__|   < 
-   \____/|_|\__,_|\___|_|\_\ |\__,_|\___|_|\_\
-                          _/ |                
-                         |__/ '
+def direct_win(game_state)
+  if game_state[:player_points] == 21 && game_state[:dealer_points] == 21
+    puts "\nIt's a Push"
+    reset_stats(game_state)
+  elsif game_state[:player_points] == 21
+    puts "\nBlackjack! You win!"    
+    game_state[:player_bank] += game_state[:bet]
+    game_state[:dealer_bank] -= game_state[:bet]
+    reset_stats(game_state)    
+  elsif game_state[:dealer_points] == 21
+    puts "\nBlackjack! The Dealer wins!"    
+    game_state[:player_bank] -= game_state[:bet]
+    game_state[:dealer_bank] += game_state[:bet]
+    reset_stats(game_state)
+  end
 end
 
-def table(game_state, hidden)
+def non_direct_win(game_state)
+  if game_state[:player_points] > game_state[:dealer_points]
+    puts "\nYou win!"    
+    game_state[:player_bank] += game_state[:bet]
+    game_state[:dealer_bank] -= game_state[:bet]
+    reset_stats(game_state)    
+  elsif game_state[:player_points] < game_state[:dealer_points]
+    puts "\nThe Dealer wins!"    
+    game_state[:player_bank] -= game_state[:bet]
+    game_state[:dealer_bank] += game_state[:bet]
+    reset_stats(game_state)
+  else
+    puts "\nPush!" 
+    reset_stats(game_state)
+  end
+end
+
+def reset_stats(game_state)
+  game_state[:deck] = lambda { deck }
+  game_state[:bet] = 0,
+  game_state[:player_hand].clear
+  game_state[:dealer_hand].clear
+end
+
+def display_table(game_state, hidden)  
   system 'clear'
   puts logo
   puts "\nDealer:"
@@ -228,83 +273,41 @@ def table(game_state, hidden)
     display_hand_hidden(game_state[:dealer_hand])
   else
     display_hand(game_state[:dealer_hand])    
+    puts game_state[:dealer_points]
   end
-  update_points(game_state)
-  display_dealer_points_status(game_state) unless hidden
   puts "\n#{game_state[:player_name]}:"
-  display_hand(game_state[:player_hand_1])
-  display_player_points_status(game_state)
+  display_hand(game_state[:player_hand])
+  puts game_state[:player_points]
 end
 
 def update_points(game_state)
-  game_state[:player_hand_1_points] = points(game_state[:player_hand_1])
-  game_state[:player_hand_2_points] = points(game_state[:player_hand_2])
+  game_state[:player_points] = points(game_state[:player_hand])
   game_state[:dealer_points] = points(game_state[:dealer_hand])
 end
+# Game internals -------------------------------------------
 
-def process_hand(game_state)
-  if game_state[:player_hand_1_points] > 21
-    puts "\nThe Dealer wins!"
-    game_state[:player_bank] -= game_state[:bet]
-    game_state[:dealer_bank] += game_state[:bet]
-  elsif game_state[:player_hand_1_points] > game_state[:dealer_points]
-    puts "\nYou win this round!"
-    game_state[:player_bank] += game_state[:bet]
-    game_state[:dealer_bank] -= game_state[:bet]
-  elsif game_state[:player_hand_1_points] == game_state[:dealer_points]
-    if game_state[:player_hand_1].size > game_state[:dealer_hand].size
-      puts "\nThe Dealer wins! (He has fewer cards)"
-      game_state[:player_bank] -= game_state[:bet]
-      game_state[:dealer_bank] += game_state[:bet]
-    elsif game_state[:player_hand_1].size < game_state[:dealer_hand].size
-      puts "\nYou win! (You have fewer cards)"
-      game_state[:player_bank] += game_state[:bet]
-      game_state[:dealer_bank] -= game_state[:bet]
-    else
-      puts "\nIt's a Push!"
-    end
-  else
-    puts "\nThe Dealer wins!"
-    game_state[:player_bank] -= game_state[:bet]
-    game_state[:dealer_bank] += game_state[:bet]
-  end
-end
-
-def want_to_play_again?
-  begin
-    puts "\nDo you want to play again? (y/n)"
-    again = gets.chomp.downcase
-  end until ['y','n'].include?(gets.chomp.downcase)
-end
-
-def display_player_points_status(game_state)
-  if game_state[:player_hand_1_points] > 21 then puts "You bust!"
-  elsif game_state[:player_hand_2_points] > 21 then puts "You bust!"
-  elsif game_state[:player_hand_1_points] == 21 then puts "You have a BLACKJACK!"
-  elsif game_state[:player_hand_2_points] == 21 then puts "You have a BLACKJACK!"
-  elsif game_state[:player_hand_1_points] < 21 then puts "#{game_state[:player_hand_1_points]}"
-  elsif game_state[:player_hand_2_points] < 21 then puts "#{game_state[:player_hand_2_points]}"
-  end
-end
-
-def display_dealer_points_status(game_state)
-  if game_state[:dealer_points] > 21 then puts "The Dealer busts!"
-  elsif game_state[:dealer_points] == 21 then puts "The Dealer has a BLACKJACK!"
-  elsif game_state[:dealer_points] < 21 then puts "#{game_state[:dealer_points]}"
-  end
-end
-        
-
+# Main loop ------------------------------------------------
 state = initial_state_of_game
 loop do
   bet(state)
   first_deal(state)
-  table(state, false)
-  process_hand(state)
+  if any_blackjacks?(state)
+    display_table(state, false)
+    direct_win(state)
+  else
+    display_table(state, true)
+    player_hits_or_stands(state)
+    dealer_hits_or_stands(state)
+    display_table(state, false)
+    non_direct_win(state)
+  end
   puts "\nDo you want to play again? (y/n)"
   again = gets.chomp.downcase 
   break if again != 'y'
+  break if state[:player_bank] == 0
   reset_stats(state)
 end
+puts "\nGame Over!"
+puts "You have #{state[:player_bank]} dollars on you!"
 
 binding.pry
