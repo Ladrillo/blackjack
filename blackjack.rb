@@ -66,7 +66,6 @@ def deck
 end
 
 def display_hand(hand)
-  puts "\nYour cards:"
   segments = []
   hand.each { |card| segments << card[:face_up].call }
   ['','','','','','',''].zip(*segments).each do |joined_segments| 
@@ -75,8 +74,6 @@ def display_hand(hand)
 end
 
 def display_hand_hidden(hand)
-  system 'clear'
-  puts "Dealer's cards:"
   segments = []
   segments << hand[0][:face_down].call
   hand[1..-1].each { |card| segments << card[:face_up].call }
@@ -124,41 +121,19 @@ def get_card_by_name(name)
   deck.select { |card| card[:name] == name }.first
 end
 
-def deal(deck, hand, number_to_deal)
-  number_to_deal.times do
-    card = deck.shift
-    hand << card
-  end
-end
-
-def reset_hand(hand)
-  hand.clear
-end
-
-# def display_new_game(deck, dealer_hand, player_hand)
-#   reset_hand(dealer_hand); reset_hand(player_hand)
-#   deal(deck, dealer_hand, 2); deal(deck, player_hand, 2)
-#   display_hand_hidden(dealer_hand); display_hand(player_hand)
-#   p points(player_hand)
-# end
-
-# def display_game(deck, dealer_hand, player_hand)
-#   deal(deck, dealer_hand, 2); deal(deck, player_hand, 2)
-#   display_hand_hidden(dealer_hand); display_hand(player_hand)
-#   p points(player_hand)
-# end
-
 def game_state
   {
-    decks: [],
+    deck: [],
     player_name: '',    
-    dealer_bank: 0,
+    dealer_bank: 50000,
     player_bank: 0,
     bet: 0,
-    points: 0,
+    player_hand_1_points: 0,
+    player_hand_2_points: 0,
+    dealer_points: 0,
     player_hand_1: [],
     player_hand_2: [],
-    dealer_hand: []    
+    dealer_hand: []
   }
 end
 
@@ -173,25 +148,15 @@ end
 
 def player_bank(game_state)
   begin
-    puts "\nHow much money are you putting into play? (Max $1,000)"
+    puts "\nHow much money do you have on you? (Max $1,000)"
     total_funds = gets.chomp.to_i 
   end while total_funds <= 0 || total_funds > 1000
   game_state[:player_bank] = total_funds
 end
 
-# This is in case player wants to choose number of decks in shoe
-# def decks(game_state)
-#   begin
-#     puts "\nHow many decks do you want to mix together? (Min 1; Max 8)"
-#     number_of_decks = gets.chomp.to_i
-#   end while !(1..8).include?(number_of_decks) 
-#   decks = []
-#   number_of_decks.times { decks += deck }
-#   game_state[:decks] = lambda { decks }
-# end
-
 def initial_state_of_game
   system 'clear'
+  puts logo
   puts "Welcome to the table!"
   puts "Blackjack pays 3 to 2."
   puts "Dealer must draw on 16 and stand on all 17's."
@@ -199,49 +164,147 @@ def initial_state_of_game
   state = game_state
   player_name(state)
   player_bank(state)
-  state[:dealer_bank] = 50000
-  state[:decks] = lambda { deck }
+  state[:deck] = lambda { deck }
   state
 end
 
-def bet(game_state) 
-  system 'clear'
+def reset_stats(game_state)
+  game_state[:bet] -= game_state[:bet]
+  game_state[:player_hand_1].clear
+  game_state[:player_hand_2].clear
+  game_state[:dealer_hand].clear
+  game_state[:deck] = lambda { deck }
+end
+
+def bet(game_state)   
   begin
+    system 'clear' 
+    puts logo
     puts "You have #{game_state[:player_bank]} dollars left."
-    puts "What is your bet for this hand?"
+    puts "The Dealer has #{game_state[:dealer_bank]} dollars left."    
+    puts "\nWhat is your bet for this hand?"
     bet = gets.chomp.to_i
   end while bet <= 0 || bet > game_state[:player_bank]
   game_state[:bet] = bet
 end
 
 def first_deal(game_state)
-  2.times do
-    card = game_state[:decks].call.shift
+  3.times do
+    card = game_state[:deck].call.shift
     game_state[:player_hand_1] << card
-    card = game_state[:decks].call.shift
+  end
+  2.times do
+    card = game_state[:deck].call.shift
     game_state[:dealer_hand] << card
   end
 end
 
-def hit_or_stay
-  begin
-    puts "\n\nWhat do you wish to do?"
-    puts "\n(h to HIT, s to STAY)"
-    action = gets.chomp.downcase
-  end while !['h','s'].include?(action) 
-  puts "\nYou have chosen to HIT!" if action == 'h'
-  puts "\nYou have decided to STAY." if action == 's'
+# def hit_or_stay
+#   begin
+#     puts "\nHIT (h), or STAY (s) ?"
+#     action = gets.chomp.downcase
+#   end while !['h','s'].include?(action) 
+#   puts "\nYou have chosen to HIT!" if action == 'h'
+#   puts "\nYou have decided to STAY." if action == 's'
+# end
+
+def logo
+  '
+   ______ _            _    _            _    
+   | ___ \ |          | |  (_)          | |   
+   | |_/ / | __ _  ___| | ___  __ _  ___| | __
+   | ___ \ |/ _` |/ __| |/ / |/ _` |/ __| |/ /
+   | |_/ / | (_| | (__|   <| | (_| | (__|   < 
+   \____/|_|\__,_|\___|_|\_\ |\__,_|\___|_|\_\
+                          _/ |                
+                         |__/ '
 end
-    
 
+def table(game_state, hidden)
+  system 'clear'
+  puts logo
+  puts "\nDealer:"
+  if hidden
+    display_hand_hidden(game_state[:dealer_hand])
+  else
+    display_hand(game_state[:dealer_hand])    
+  end
+  update_points(game_state)
+  display_dealer_points_status(game_state) unless hidden
+  puts "\n#{game_state[:player_name]}:"
+  display_hand(game_state[:player_hand_1])
+  display_player_points_status(game_state)
+end
 
+def update_points(game_state)
+  game_state[:player_hand_1_points] = points(game_state[:player_hand_1])
+  game_state[:player_hand_2_points] = points(game_state[:player_hand_2])
+  game_state[:dealer_points] = points(game_state[:dealer_hand])
+end
 
+def process_hand(game_state)
+  if game_state[:player_hand_1_points] > 21
+    puts "\nThe Dealer wins!"
+    game_state[:player_bank] -= game_state[:bet]
+    game_state[:dealer_bank] += game_state[:bet]
+  elsif game_state[:player_hand_1_points] > game_state[:dealer_points]
+    puts "\nYou win this round!"
+    game_state[:player_bank] += game_state[:bet]
+    game_state[:dealer_bank] -= game_state[:bet]
+  elsif game_state[:player_hand_1_points] == game_state[:dealer_points]
+    if game_state[:player_hand_1].size > game_state[:dealer_hand].size
+      puts "\nThe Dealer wins! (He has fewer cards)"
+      game_state[:player_bank] -= game_state[:bet]
+      game_state[:dealer_bank] += game_state[:bet]
+    elsif game_state[:player_hand_1].size < game_state[:dealer_hand].size
+      puts "\nYou win! (You have fewer cards)"
+      game_state[:player_bank] += game_state[:bet]
+      game_state[:dealer_bank] -= game_state[:bet]
+    else
+      puts "\nIt's a Push!"
+    end
+  else
+    puts "\nThe Dealer wins!"
+    game_state[:player_bank] -= game_state[:bet]
+    game_state[:dealer_bank] += game_state[:bet]
+  end
+end
+
+def want_to_play_again?
+  begin
+    puts "\nDo you want to play again? (y/n)"
+    again = gets.chomp.downcase
+  end until ['y','n'].include?(gets.chomp.downcase)
+end
+
+def display_player_points_status(game_state)
+  if game_state[:player_hand_1_points] > 21 then puts "You bust!"
+  elsif game_state[:player_hand_2_points] > 21 then puts "You bust!"
+  elsif game_state[:player_hand_1_points] == 21 then puts "You have a BLACKJACK!"
+  elsif game_state[:player_hand_2_points] == 21 then puts "You have a BLACKJACK!"
+  elsif game_state[:player_hand_1_points] < 21 then puts "#{game_state[:player_hand_1_points]}"
+  elsif game_state[:player_hand_2_points] < 21 then puts "#{game_state[:player_hand_2_points]}"
+  end
+end
+
+def display_dealer_points_status(game_state)
+  if game_state[:dealer_points] > 21 then puts "The Dealer busts!"
+  elsif game_state[:dealer_points] == 21 then puts "The Dealer has a BLACKJACK!"
+  elsif game_state[:dealer_points] < 21 then puts "#{game_state[:dealer_points]}"
+  end
+end
+        
 
 state = initial_state_of_game
-bet(state)
-first_deal(state)
-display_hand_hidden(state[:dealer_hand])
-display_hand(state[:player_hand_1])
-hit_or_stay
+loop do
+  bet(state)
+  first_deal(state)
+  table(state, false)
+  process_hand(state)
+  puts "\nDo you want to play again? (y/n)"
+  again = gets.chomp.downcase 
+  break if again != 'y'
+  reset_stats(state)
+end
 
 binding.pry
