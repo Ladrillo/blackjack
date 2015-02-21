@@ -189,7 +189,7 @@ def bet(state)
     puts logo
     puts "\n" * 3 + " You have #{state[:player_bank]} dollars left."
     puts " The Dealer has #{state[:dealer_bank]} dollars left."    
-    puts "\n What is your bet for this hand?"
+    puts "\n What is your bet for this hand, #{state[:player_name]}?"
     bet = gets.chomp.to_i
   end while bet <= 0 || bet > state[:player_bank] || bet > state[:dealer_bank]
   state[:bet] = bet
@@ -206,10 +206,8 @@ def first_deal(state)
 end
 
 def any_blackjacks?(state)
-  if points(state[:player_hand]) == 21 then true
-  elsif points(state[:dealer_hand]) == 21 then true
-  else false
-  end
+  points(state[:player_hand]) == 21 || 
+  points(state[:dealer_hand]) == 21
 end
 
 def deal(state, hand)
@@ -347,7 +345,7 @@ def display_goodbye_message(state)
     puts " And your Grandma thought you were"
     puts " sooo brilliant." 
   elsif state[:player_bank] > state[:player_bank_initial]
-    puts "\n" * 3 + " You won #{state[:player_bank] - state[:player_bank_initial]} dollars."
+    puts "\n" * 3 + " So you won #{state[:player_bank] - state[:player_bank_initial]} dollars."
     puts " You probably think you're smart!"
     puts " Congratulations..."
   end
